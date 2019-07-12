@@ -71,7 +71,7 @@ def configure_app():
     mode_names = ["create", "edit", "delete", "echo", "copy", "help"]
     if shutil.which('xclip') is not None: copy_command = "xclip -selection clipboard %s"
     elif shutil.which('pbcopy') is not None: copy_command = "pbcopy < %s"
-    else: mode_names.pop(3)
+    else: mode_names.pop(mode_names.index("copy"))
     has_remote = True if git_action("show_remote") != "none" else False
 
 def git_action(action, args = []):
@@ -133,14 +133,18 @@ def git_action(action, args = []):
             ') > /dev/null 2>&1 &'
         ) % notes_dir)
 
-def get_note_contents(note):
+def get_note_contents(possible_notes, selected):
+
+    if selected in range(len(possible_notes)):
+        note = possible_notes[selected]
+    else: return ""
 
     with open(notes_dir + note, 'r') as note_file:
         note_contents = note_file.readlines()
 
     return note_contents
 
-def draw_window(win, current_mode, query, tab_string, selected, possible_notes):
+def draw_window(win, current_mode, query, tab_string, selected, possible_notes, note_contents, note_start_line):
 
     prompt = ">> "
     bar = "_" * window_width
@@ -229,8 +233,6 @@ def draw_window(win, current_mode, query, tab_string, selected, possible_notes):
             start = selected - half_length
             end = selected + half_length + 1
 
-
-        note_contents = get_note_contents(contents[selected])
         current_line = body_start_line
         note_line = 0
 
@@ -242,8 +244,8 @@ def draw_window(win, current_mode, query, tab_string, selected, possible_notes):
             else:
                 win.addstr(current_line, 0, (" "*len(prompt)+contents[i]).ljust(window_width//2)[:window_width//2] + "|")
 
-            if note_line in range(len(note_contents)):
-                win.addstr(note_contents[note_line][:window_width//2-1].ljust(window_width//2-1))
+            if note_line + note_start_line in range(len(note_contents)):
+                win.addstr(note_contents[note_line + note_start_line][:window_width//2-1].ljust(window_width//2-1))
             else:
                 win.addstr(" " * (window_width//2-1))
 
@@ -254,8 +256,8 @@ def draw_window(win, current_mode, query, tab_string, selected, possible_notes):
 
             win.addstr(current_line,0," " * (window_width//2) + "|")
 
-            if note_line in range(len(note_contents)):
-                win.addstr(note_contents[note_line][:window_width//2])
+            if note_line + note_start_line in range(len(note_contents)):
+                win.addstr(note_contents[note_line+note_start_line][:window_width//2])
             else:
                 win.addstr(" " * (window_width//2))
 
@@ -422,10 +424,12 @@ def main(win, current_mode, query, selected, pull_first):
     notes_dir_contents = os.listdir(notes_dir)
     possible_notes, not_possible_notes = filter_notes(notes_dir_contents, query)
     tab_string = get_tab_string(possible_notes, query)
+    note_contents = get_note_contents(possible_notes, selected)
+    note_start_line = 0
 
     while True:
 
-        draw_window(win, current_mode, query, tab_string, selected, possible_notes)
+        draw_window(win, current_mode, query, tab_string, selected, possible_notes, note_contents, note_start_line)
         forwards = True
         ch = win.getkey()
 
@@ -450,11 +454,25 @@ def main(win, current_mode, query, selected, pull_first):
             continue
 
         elif ch == 'KEY_UP':
-            if selected > 0: selected -= 1
+            if selected > 0: 
+                selected -= 1
+                note_start_line = 0
+                note_contents = get_note_contents(possible_notes, selected)
             continue
 
         elif ch == 'KEY_DOWN':
-            if selected < len(possible_notes) - 1: selected += 1
+            if selected < len(possible_notes) - 1: 
+                selected += 1
+                note_start_line = 0
+                note_contents = get_note_contents(possible_notes, selected)
+            continue
+
+        elif ch == 'KEY_SR':
+            if note_start_line > 0: note_start_line -= 1
+            continue
+
+        elif ch == 'KEY_SF':
+            if note_start_line < len(note_contents) - 1: note_start_line += 1
             continue
 
         elif ch == 'KEY_BACKSPACE':
