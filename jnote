@@ -68,7 +68,7 @@ def configure_app():
 
     set_window_size()
     editor = os.getenv('EDITOR', "vi")
-    mode_names = ["edit", "delete", "echo", "copy", "help"]
+    mode_names = ["create", "edit", "delete", "echo", "copy", "help"]
     if shutil.which('xclip') is not None: copy_command = "xclip -selection clipboard %s"
     elif shutil.which('pbcopy') is not None: copy_command = "pbcopy < %s"
     else: mode_names.pop(3)
@@ -133,6 +133,13 @@ def git_action(action, args = []):
             ') > /dev/null 2>&1 &'
         ) % notes_dir)
 
+def get_note_contents(note):
+
+    with open(notes_dir + note, 'r') as note_file:
+        note_contents = note_file.readlines()
+
+    return note_contents
+
 def draw_window(win, current_mode, query, tab_string, selected, possible_notes):
 
     prompt = ">> "
@@ -144,12 +151,25 @@ def draw_window(win, current_mode, query, tab_string, selected, possible_notes):
     def draw_help(win):
 
         help_message = [
-            "  ← →  | change mode         ",
-            "  ↑ ↓  | change selection    ",
-            " [TAB] | auto-complete prompt",
-            " [DEL] | clear prompt        ",
-            " [RET] | make selection      ",
-            " ctrlC | quit                "
+            "active remote: " + git_action("show_remote"),
+            "",
+            "",
+            "           controls                               cli             ",
+            "_______________________________    _______________________________",
+            "  ← →  | change mode                jnote --show-remote           ",
+            "  ↑ ↓  | change selection           jnote --init-remote [remote]  ",
+            " [TAB] | auto-complete prompt       jnote --join-remote [remote]  ",
+            " [DEL] | clear prompt               jnote --remove-remote         ",
+            " [RET] | make selection             jnote --update                ",
+            " ctrlC | quit                       jnote --uninstal              ",
+            "",
+            "             modes                 ",
+            "_______________________________    ",
+            "create | create note               ",
+            "  edit | edit note with $EDITOR    ",
+            "delete | delete note               ",
+            "  echo | print note to console     ",
+            "  copy | copy note to clipboard    ",
         ]
 
         for i, line in enumerate(help_message):
@@ -171,10 +191,26 @@ def draw_window(win, current_mode, query, tab_string, selected, possible_notes):
 
     def draw_body(win, current_mode, query,selected, contents):
 
-        if len(contents) == 0 and current_mode == 0 and query != '':
+        def clear_body():
             win.addstr(body_start_line,0,prompt)
-            win.addstr(body_start_line,len(prompt), query +"\n"*(window_height-9), curses.A_STANDOUT)
+            win.addstr(body_start_line,0,(" |".center(window_width-1) +  "\n")*(window_height-body_start_line-1))
+
+        if mode_names[current_mode] == "create":
+
+            clear_body()
+            
+            if query == "": return
+
+            win.addstr(body_start_line,0,prompt)
+            win.addstr("create note: " + query, curses.A_STANDOUT)
             return
+
+        elif len(contents) == 0:
+            clear_body()
+            return
+
+        win.addstr(body_start_line - 1,0," " * (window_width//2) + "|" + " " * (window_width//2))
+
 
         body_length = window_height - (body_start_line + 1)
         if body_length % 2 == 0: body_length -= 1
@@ -193,23 +229,45 @@ def draw_window(win, current_mode, query, tab_string, selected, possible_notes):
             start = selected - half_length
             end = selected + half_length + 1
 
+
+        note_contents = get_note_contents(contents[selected])
         current_line = body_start_line
+        note_line = 0
 
         for i in range(start, end):
             if i == selected:
-                win.addstr(current_line,0,prompt.ljust(window_width))
-                win.addstr(current_line, len(prompt), contents[i], curses.A_STANDOUT)
+                win.addstr(current_line,0,prompt)
+                win.addstr(contents[i][:window_width//2], curses.A_STANDOUT)
+                win.addstr(" " * (window_width//2 - len(prompt + contents[i])) + "|")
             else:
-                win.addstr(current_line, 0, (" "*len(prompt)+contents[i]).ljust(window_width))
-            current_line += 1
+                win.addstr(current_line, 0, (" "*len(prompt)+contents[i]).ljust(window_width//2)[:window_width//2] + "|")
 
-        win.addstr(current_line,0,"\n"*(window_height-current_line-1))
+            if note_line in range(len(note_contents)):
+                win.addstr(note_contents[note_line][:window_width//2-1].ljust(window_width//2-1))
+            else:
+                win.addstr(" " * (window_width//2-1))
+
+            current_line += 1
+            note_line += 1
+
+        for j in range(current_line, window_height-1):
+
+            win.addstr(current_line,0," " * (window_width//2) + "|")
+
+            if note_line in range(len(note_contents)):
+                win.addstr(note_contents[note_line][:window_width//2])
+            else:
+                win.addstr(" " * (window_width//2))
+
+            current_line += 1
+            note_line += 1
 
     if mode_names[current_mode] == 'help':
         win.clear()
         draw_mode(win, current_mode)
         draw_help(win)
         win.refresh()
+    
     else:
         draw_mode(win, current_mode)
         draw_prompt(win, query, tab_string)
@@ -256,9 +314,13 @@ def notification(win, notification_type, note_selection=""):
         win.addstr("continue")
         win.addstr(" ]", curses.A_STANDOUT)
 
-    if notification_type == "delete":
+    if notification_type == "create" or notification_type == "delete":
 
-        popup[3] = "║" + ('delete note: "%s"' % note_selection).center(popup_len) + "║"
+        if notification_type == "create":
+            popup[3] = "║" + ('overwrite note: "%s"' % note_selection).center(popup_len) + "║"
+        elif notification_type == "delete":
+            popup[3] = "║" + ('delete note: "%s"' % note_selection).center(popup_len) + "║"
+        
         confirm = False
 
         while True:
@@ -311,14 +373,14 @@ def filter_notes(list_in, query):
 
     for note in all_notes:
 
-        if note.startswith(query):
+        if note.startswith(query) or contains_query(note, query):
             possible_notes.append(note)
         else:
             not_possible_notes.append(note)
 
     return possible_notes, not_possible_notes
 
-def get_tab_string(list_in):
+def get_tab_string(list_in, query):
 
     def common_start(sa, sb):
         def _iter():
@@ -336,7 +398,12 @@ def get_tab_string(list_in):
     for item in list_in[1:]:
         tab_string = common_start(tab_string, item)
 
-    return tab_string
+    return tab_string if tab_string.startswith(query) else query
+
+def contains_query(note, query):
+
+    grep_result = subprocess.run(['grep', '-il', query, notes_dir + note], stdout=subprocess.PIPE).stdout.decode('utf-8')
+    return True if grep_result else False
 
 def main(win, current_mode, query, selected, pull_first):
 
@@ -354,7 +421,7 @@ def main(win, current_mode, query, selected, pull_first):
 
     notes_dir_contents = os.listdir(notes_dir)
     possible_notes, not_possible_notes = filter_notes(notes_dir_contents, query)
-    tab_string = get_tab_string(possible_notes)
+    tab_string = get_tab_string(possible_notes, query)
 
     while True:
 
@@ -363,6 +430,7 @@ def main(win, current_mode, query, selected, pull_first):
         ch = win.getkey()
 
         if ch == 'KEY_RESIZE':
+
             win.clear()
             win.refresh()
             time.sleep(.1)
@@ -403,14 +471,17 @@ def main(win, current_mode, query, selected, pull_first):
 
         elif ch == '\n':
 
-            if len(possible_notes) == 0:
+            if mode_names[current_mode] == "create": note_selection = query
 
-                if mode_names[current_mode] != "edit": continue
-                else: note_selection = query
+            elif len(possible_notes) == 0: continue
 
             else: note_selection = possible_notes[selected]
 
-            if mode_names[current_mode] == "delete":
+            if mode_names[current_mode] == "create":
+                if note_selection in possible_notes:
+                    if not notification(win, "create", note_selection): continue
+
+            elif mode_names[current_mode] == "delete":
                 if not notification(win, "delete", note_selection): continue
 
             elif mode_names[current_mode] == "echo":
@@ -427,7 +498,7 @@ def main(win, current_mode, query, selected, pull_first):
 
             possible_notes_helper = []
             for note in possible_notes:
-                if note.startswith(query): possible_notes_helper.append(note)
+                if note.startswith(query) or contains_query(note, query): possible_notes_helper.append(note)
                 else: not_possible_notes.append(note)
             if len(possible_notes) != len(possible_notes_helper):
                 selected = 0
@@ -437,7 +508,7 @@ def main(win, current_mode, query, selected, pull_first):
 
             not_possible_notes_helper = []
             for note in not_possible_notes:
-                if not note.startswith(query): not_possible_notes_helper.append(note)
+                if not note.startswith(query) and not contains_query(note, query): not_possible_notes_helper.append(note)
                 else: possible_notes.append(note)
 
             if len(not_possible_notes) != len(not_possible_notes_helper):
@@ -447,17 +518,14 @@ def main(win, current_mode, query, selected, pull_first):
 
         if len(possible_notes) == 0: tab_string = query
 
-        else: tab_string = get_tab_string(possible_notes)
+        else: tab_string = get_tab_string(possible_notes, query)
 
-def start_app(current_mode=0, query="", selected=0, pull_first=False):
+def start_app(current_mode=1, query="", selected=0, pull_first=False):
 
     try: curses.wrapper(main, current_mode, query, selected, pull_first)
 
-    except KeyboardInterrupt: 
+    except KeyboardInterrupt: pass
         
-        git_action("push")
-        sys.exit()
-
     except StopIteration as e:
 
         end_mode = e.args[0]
@@ -466,7 +534,13 @@ def start_app(current_mode=0, query="", selected=0, pull_first=False):
         end_selected = e.args[3]
         note_path = notes_dir + note_selection
 
-        if mode_names[end_mode] == "edit":
+        if mode_names[end_mode] == "create":
+
+            os.system("rm " + note_path + " 2>/dev/null")
+            os.system(editor+ " " + note_path)
+            start_app(current_mode = mode_names.index("edit"), query = end_query)
+
+        elif mode_names[end_mode] == "edit":
 
             os.system(editor+ " " + note_path)
             start_app(current_mode = end_mode, query = end_query)
@@ -478,7 +552,13 @@ def start_app(current_mode=0, query="", selected=0, pull_first=False):
 
         elif mode_names[end_mode] == "echo":
 
+            print("\n" + 
+                "=" * ((window_width -len(note_selection))//2-2) + 
+                "[ " + note_selection + " ]" + 
+                "=" * ((window_width -len(note_selection))//2-2) +
+                "\n")
             os.system("cat " + note_path + " 2>/dev/null")
+            print("\n" + "=" * window_width + "\n")
             start_app(current_mode = end_mode, query = end_query, selected = end_selected)
 
         elif mode_names[end_mode] == "copy":
@@ -490,6 +570,8 @@ def start_app(current_mode=0, query="", selected=0, pull_first=False):
         sys.exit()
 
     except: raise
+
+    finally: git_action("push")
 
 handle_args()
 configure_app()
