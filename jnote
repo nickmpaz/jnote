@@ -68,7 +68,7 @@ def configure_app():
 
     set_window_size()
     editor = os.getenv('EDITOR', "vi")
-    mode_names = ["create", "edit", "delete", "echo", "copy", "help"]
+    mode_names = ["create", "edit", "delete", "echo", "copy"]
     if shutil.which('xclip') is not None: copy_command = "xclip -selection clipboard %s"
     elif shutil.which('pbcopy') is not None: copy_command = "pbcopy < %s"
     else: mode_names.pop(mode_names.index("copy"))
@@ -147,73 +147,37 @@ def get_note_contents(possible_notes, selected):
 def draw_window(win, current_mode, query, tab_string, selected, possible_notes, note_contents, note_start_line):
 
     prompt = ">> "
-    bar = "_" * window_width
+    bar = "═" * window_width
+    t_bar = "═" * (window_width//2-1) + "╦" + "═" * (window_width//2+1)
     mode_start_line = 0
-    prompt_start_line = 5
-    body_start_line = 8
-
-    def draw_help(win):
-
-        help_message = [
-            "active remote: " + git_action("show_remote"),
-            "",
-            "",
-            "           controls                               cli             ",
-            "_______________________________    _______________________________",
-            "  ← →  | change mode                jnote --show-remote           ",
-            "  ↑ ↓  | change selection           jnote --init-remote [remote]  ",
-            " [TAB] | auto-complete prompt       jnote --join-remote [remote]  ",
-            " [DEL] | clear prompt               jnote --remove-remote         ",
-            " [RET] | make selection             jnote --update                ",
-            " ctrlC | quit                       jnote --uninstal              ",
-            "",
-            "             modes                 ",
-            "_______________________________    ",
-            "create | create note               ",
-            "  edit | edit note with $EDITOR    ",
-            "delete | delete note               ",
-            "  echo | print note to console     ",
-            "  copy | copy note to clipboard    ",
-        ]
-
-        for i, line in enumerate(help_message):
-            win.addstr(i+window_height//2-len(help_message)//2,0,line.center(window_width))
+    prompt_start_line = 3
+    body_start_line = 5
 
     def draw_mode(win, current_mode):
 
-        win.addstr(mode_start_line,0,bar+'\n')
+        win.addstr(mode_start_line,0,bar)
         for i, mode in enumerate(mode_names):
             if i == current_mode: win.addstr(mode.center(window_width // len(mode_names)), curses.A_STANDOUT)
             else: win.addstr(mode.center(window_width // len(mode_names)))
-        win.addstr(mode_start_line + 3,0,bar)
+        win.addstr(mode_start_line + 2,0,bar)
 
     def draw_prompt(win, query, tab_string):
 
         win.addstr(prompt_start_line,0,(prompt+query).ljust(window_width))
         win.addstr(prompt_start_line, len(prompt + query), tab_string[len(query):], curses.A_STANDOUT)
-        win.addstr(prompt_start_line + 1,0,bar)
+        win.addstr(prompt_start_line + 1,0,t_bar)
 
-    def draw_body(win, current_mode, query,selected, contents):
-
-        def clear_body():
-            win.addstr(body_start_line,0,prompt)
-            win.addstr(body_start_line,0,(" |".center(window_width-1) +  "\n")*(window_height-body_start_line-1))
+    def draw_body(win, current_mode, query,selected, contents, note_preview = True):
 
         if mode_names[current_mode] == "create":
 
-            clear_body()
-            
+            win.addstr(body_start_line,0,prompt)
+            win.addstr(body_start_line,0,(" " * (window_width-1) +  "\n")*(window_height-body_start_line-1))
             if query == "": return
-
             win.addstr(body_start_line,0,prompt)
             win.addstr("create note: " + query, curses.A_STANDOUT)
             return
 
-        elif len(contents) == 0:
-            clear_body()
-            return
-
-        win.addstr(body_start_line - 1,0," " * (window_width//2) + "|" + " " * (window_width//2))
 
 
         body_length = window_height - (body_start_line + 1)
@@ -240,9 +204,9 @@ def draw_window(win, current_mode, query, tab_string, selected, possible_notes, 
             if i == selected:
                 win.addstr(current_line,0,prompt)
                 win.addstr(contents[i][:window_width//2], curses.A_STANDOUT)
-                win.addstr(" " * (window_width//2 - len(prompt + contents[i])) + "|")
+                win.addstr(" " * (window_width//2 - 1 - len(prompt + contents[i])) + "║")
             else:
-                win.addstr(current_line, 0, (" "*len(prompt)+contents[i]).ljust(window_width//2)[:window_width//2] + "|")
+                win.addstr(current_line, 0, ("   "+contents[i])[:window_width//2-1].ljust(window_width//2-1) + "║")
 
             if note_line + note_start_line in range(len(note_contents)):
                 win.addstr(note_contents[note_line + note_start_line][:window_width//2-1].ljust(window_width//2-1))
@@ -252,29 +216,23 @@ def draw_window(win, current_mode, query, tab_string, selected, possible_notes, 
             current_line += 1
             note_line += 1
 
-        for j in range(current_line, window_height-1):
+        for j in range(current_line, window_height):
 
-            win.addstr(current_line,0," " * (window_width//2) + "|")
-
+            win.addstr(current_line,0," " * (window_width//2-1) + "║")
             if note_line + note_start_line in range(len(note_contents)):
-                win.addstr(note_contents[note_line+note_start_line][:window_width//2])
+                win.insstr(note_contents[note_line+note_start_line][:window_width//2-1])
             else:
-                win.addstr(" " * (window_width//2))
+                win.addstr(" " * (window_width//2-1))
 
             current_line += 1
             note_line += 1
 
-    if mode_names[current_mode] == 'help':
-        win.clear()
-        draw_mode(win, current_mode)
-        draw_help(win)
-        win.refresh()
-    
-    else:
-        draw_mode(win, current_mode)
-        draw_prompt(win, query, tab_string)
-        draw_body(win, current_mode, query, selected, possible_notes)
-        win.refresh()
+
+
+    draw_mode(win, current_mode)
+    draw_prompt(win, query, tab_string)
+    draw_body(win, current_mode, query, selected, possible_notes)
+    win.refresh()
 
 def notification(win, notification_type, note_selection=""):
 
@@ -410,6 +368,7 @@ def contains_query(note, query):
 def main(win, current_mode, query, selected, pull_first):
 
     curses.use_default_colors()
+
     curses.curs_set(False)
     win.keypad(True)
     win.refresh()
@@ -439,7 +398,7 @@ def main(win, current_mode, query, selected, pull_first):
             win.refresh()
             time.sleep(.1)
             set_window_size()
-            start_app(current_mode, query, selected)
+            start_app(current_mode, query, selected) #FIXME just continue?
             sys.exit()
 
         elif ch == 'KEY_RIGHT':
@@ -448,9 +407,6 @@ def main(win, current_mode, query, selected, pull_first):
 
         elif ch == 'KEY_LEFT':
             current_mode = (current_mode - 1) % len(mode_names)
-            continue
-
-        elif mode_names[current_mode] == "help":
             continue
 
         elif ch == 'KEY_UP':
@@ -468,11 +424,11 @@ def main(win, current_mode, query, selected, pull_first):
             continue
 
         elif ch == 'KEY_SR':
-            if note_start_line > 0: note_start_line -= 1
+            if note_start_line > 2: note_start_line -= 3
             continue
 
         elif ch == 'KEY_SF':
-            if note_start_line < len(note_contents) - 1: note_start_line += 1
+            if note_start_line < len(note_contents) - 3: note_start_line += 3
             continue
 
         elif ch == 'KEY_BACKSPACE':
@@ -520,6 +476,8 @@ def main(win, current_mode, query, selected, pull_first):
                 else: not_possible_notes.append(note)
             if len(possible_notes) != len(possible_notes_helper):
                 selected = 0
+                note_start_line = 0
+                note_contents = get_note_contents(sorted(possible_notes_helper), selected)
             possible_notes = possible_notes_helper
 
         else:
@@ -529,10 +487,14 @@ def main(win, current_mode, query, selected, pull_first):
                 if not note.startswith(query) and not contains_query(note, query): not_possible_notes_helper.append(note)
                 else: possible_notes.append(note)
 
+            possible_notes = sorted(possible_notes)
+
             if len(not_possible_notes) != len(not_possible_notes_helper):
                 selected = 0
+                note_start_line = 0
+                note_contents = get_note_contents(possible_notes, selected)
             not_possible_notes = not_possible_notes_helper
-            possible_notes = sorted(possible_notes)
+            
 
         if len(possible_notes) == 0: tab_string = query
 
