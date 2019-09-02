@@ -10,7 +10,7 @@ class ModeBar(ScrollPageComponent):
         self.focus = 1
 
     def draw(self):
-
+        super(ScrollPageComponent, self).draw()
         item_width = self.width // len(self.items)
 
         for i, item in enumerate(self.items):
@@ -85,9 +85,11 @@ class TextBox(TextBoxComponent):
         if self.startline >= 3: self.startline -=3
 
     def draw(self):
-
+        super(TextBoxComponent, self).draw()
         self.win.clear()
-        if not self.note: return
+        if not self.note: 
+            self.win.refresh()
+            return
 
         with open(self.notes_dir + self.note, 'r') as note_file:
             note_contents = note_file.readlines()

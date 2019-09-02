@@ -11,12 +11,16 @@ class Component(ABC):
         self.border_height = height
         self.border_width = width
         self.border_win = curses.newwin(height, width, begin_y, begin_x)
-        self.border_win.border()
-        self.border_win.refresh()
+        # self.border_win.border()
+        # self.border_win.refresh()
         self.height = height - 2
         self.width = width - 2
         self.win = curses.newwin(self.height, self.width, begin_y + 1, begin_x + 1)
-        self.win.refresh()
+        # self.win.refresh()
+
+    def draw(self):
+        self.border_win.border()
+        self.border_win.refresh()
 
     
 class SearchBarComponent(Component):
@@ -27,6 +31,7 @@ class SearchBarComponent(Component):
         self.tab_string = ""
 
     def draw(self): 
+        super().draw()
         text_line = (self.height // 2) 
         self.win.addstr(text_line, 0, self.query)
         self.win.clrtoeol()
@@ -75,7 +80,7 @@ class ScrollPageComponent(Component):
 
 
     def draw(self):
-
+        super().draw()
         if len(self.items) == 0:
             self.win.clear()
             self.win.refresh()
@@ -119,6 +124,7 @@ class ProgressBarComponent(Component):
         self.message = "test"
 
     def draw(self):
+        super().draw()
         bar_middle_y = self.height // 2 
         box_width = self.width // 2  
         bar_width = box_width - 2
@@ -141,4 +147,78 @@ class TextBoxComponent(Component):
         super().__init__(height, width, begin_y, begin_x)
         self.content = ""
 
-    def draw(self): pass
+    def draw(self): 
+        super().draw()
+
+
+class NotificationComponent(Component):
+    
+    def __init__(self, height=10, width=10, begin_y=0, begin_x=0, stdscr=None, prompt=""):
+        super().__init__(height, width, begin_y, begin_x)
+        self.prompt = prompt
+        self.stdscr = stdscr
+
+    def draw(self): 
+        super().draw()
+        self.win.clear()
+        vertical_spacing = self.height // 3
+        horizontal_spacing = self.width // 5
+
+        self.win.addstr(vertical_spacing, 0, self.prompt.center(self.width))
+        self.win.addstr(vertical_spacing * 2, horizontal_spacing*2, "continue".center(horizontal_spacing), curses.A_STANDOUT)
+        self.win.refresh()
+
+
+    def popup(self, prompt=None):
+
+        if prompt: self.prompt = prompt
+        self.draw()
+        ch = self.stdscr.getkey()
+        self.stdscr.clear()
+        self.stdscr.refresh()
+
+
+class ConfirmNotificationComponent(Component):
+
+    def __init__(self, height=10, width=10, begin_y=0, begin_x=0, stdscr=None, prompt="", default_confirm=True):
+        super().__init__(height, width, begin_y, begin_x)
+        
+        self.prompt = prompt
+        self.confirm = default_confirm
+        self.stdscr = stdscr
+
+    def draw(self): 
+        super().draw()
+        self.win.clear()
+        vertical_spacing = self.height // 3
+        horizontal_spacing = self.width // 5
+
+        self.win.addstr(vertical_spacing, 0, self.prompt.center(self.width))
+
+        if self.confirm:
+            self.win.addstr(vertical_spacing * 2, horizontal_spacing, "yes".center(horizontal_spacing), curses.A_STANDOUT)
+            self.win.addstr(vertical_spacing * 2, horizontal_spacing * 3, "no".center(horizontal_spacing))
+            
+
+        else: 
+            self.win.addstr(vertical_spacing * 2, horizontal_spacing, "yes".center(horizontal_spacing))
+            self.win.addstr(vertical_spacing * 2, horizontal_spacing * 3, "no".center(horizontal_spacing), curses.A_STANDOUT)
+        self.win.refresh()
+
+
+    def popup(self, prompt=None):
+
+        if prompt: self.prompt = prompt
+
+        while True:
+
+            self.draw()
+            ch = self.stdscr.getkey()
+            if ch == "\n": 
+                break
+            elif ch in ["KEY_LEFT", "KEY_RIGHT"]:
+                self.confirm = not self.confirm
+            
+        self.stdscr.clear()
+        self.stdscr.refresh()
+        return self.confirm
