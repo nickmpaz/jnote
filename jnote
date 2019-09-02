@@ -35,6 +35,40 @@ def handle_screen_size(mode_bar, search_bar, scroll_page, text_box, confirm_wind
     scroll_page.set_window_size(sph, spw, spsy, spsx)
     text_box.set_window_size(tbh, tbw, tbsy, tbsx)
     
+def create(search_bar, scroll_page, confirm_window):
+
+    if search_bar.query == "": return 
+    note_exists = search_bar.query in scroll_page.items
+    if note_exists and not confirm_window.popup('overwrite "%s"' % search_bar.query): return
+
+    curses.endwin()
+    create_note(notes_dir, search_bar.query)
+    
+    if not note_exists:
+        scroll_page.items.append(search_bar.query)
+        scroll_page.items = sorted(scroll_page.items)
+
+def edit(scroll_page):
+    
+    if not scroll_page.get_current_item(): return
+    curses.endwin()
+    edit_note(notes_dir, scroll_page.get_current_item())
+
+def delete(scroll_page, confirm_window):
+
+    if not scroll_page.get_current_item() or not confirm_window.popup('delete "%s"' % scroll_page.get_current_item()): return
+    delete_note(notes_dir, scroll_page.get_current_item())
+    scroll_page.items.pop(scroll_page.focus)
+    scroll_page.decrement_focus()
+
+def copy(): pass
+
+def echo(scroll_page, notification_window):
+
+    if not scroll_page.get_current_item(): return
+    curses.endwin()
+    echo_note(notes_dir, scroll_page.get_current_item())
+    notification_window.popup('printed "%s" to console' % scroll_page.get_current_item())
 
 def main(stdscr):
     
@@ -58,7 +92,6 @@ def main(stdscr):
 
         scroll_page.apply_filter(search_bar.query, filter_is_more_specific)
         filter_is_more_specific = True
-
         text_box.note = scroll_page.get_current_item()
 
         mode_bar.draw()
@@ -68,55 +101,21 @@ def main(stdscr):
 
         ch = stdscr.getkey()
 
-        if ch == '\n' and mode_bar.get_current_item() == "create":
-            
-            if search_bar.query == "" or not confirm_window.popup('create "%s"' % search_bar.query): continue
-
-            curses.endwin()
-            create_note(notes_dir, search_bar.query)
-            scroll_page.items.append(search_bar.query)
-            scroll_page.items = sorted(scroll_page.items)
+        if ch == '\n' and mode_bar.get_current_item() == "create": create(search_bar, scroll_page, confirm_window)
         
-        elif ch == '\n' and mode_bar.get_current_item() == "edit": 
+        elif ch == '\n' and mode_bar.get_current_item() == "edit": edit(scroll_page)
 
-            if not scroll_page.get_current_item(): continue
+        elif ch == '\n' and mode_bar.get_current_item() == "delete": delete(scroll_page, confirm_window)
 
-            curses.endwin()
-            edit_note(notes_dir, scroll_page.get_current_item())
+        elif ch == '\n' and mode_bar.get_current_item() == "copy": pass
 
-        elif ch == '\n' and mode_bar.get_current_item() == "delete": 
-            
-            if not scroll_page.get_current_item() or not confirm_window.popup('delete "%s"' % scroll_page.get_current_item()): continue
+        elif ch == '\n' and mode_bar.get_current_item() == "echo": echo(scroll_page, notification_window)
 
-            delete_note(notes_dir, scroll_page.get_current_item())
-            scroll_page.items.pop(scroll_page.focus)
-            scroll_page.focus = 0
+        elif ch == 'KEY_BACKSPACE': search_bar.query = search_bar.query[:-1]; filter_is_more_specific = False
 
-        elif ch == '\n' and mode_bar.get_current_item() == "copy": 
-            
-            pass
+        elif ch == 'KEY_DC': search_bar.query = ""; filter_is_more_specific = False
 
-        elif ch == '\n' and mode_bar.get_current_item() == "echo": 
-
-            if not scroll_page.get_current_item(): continue
-
-            curses.endwin()
-            echo_note(notes_dir, scroll_page.get_current_item())
-            notification_window.popup('printed "%s" to console' % scroll_page.get_current_item())
-
-        elif ch == 'KEY_BACKSPACE':
-
-            search_bar.query = search_bar.query[:-1]
-            filter_is_more_specific = False
-
-        elif ch == 'KEY_DC':
-
-            search_bar.query = ""
-            filter_is_more_specific = False
-
-        elif ch == 'KEY_RESIZE':
-            #FIXME
-            pass
+        elif ch == 'KEY_RESIZE': pass
 
         elif ch == 'KEY_LEFT': mode_bar.decrement_focus()
 
@@ -132,7 +131,6 @@ def main(stdscr):
 
         elif len(ch) == 1: search_bar.query += ch
     
-
 try: curses.wrapper(main)
 except KeyboardInterrupt: sys.exit()
 except: raise
