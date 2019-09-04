@@ -76,6 +76,10 @@ def main(stdscr):
     stdscr.keypad(True)
     curses.use_default_colors()
     curses.curs_set(False)
+#     curses.init_pair(1, curses.COLOR_BLUE, -1)
+#     curses.init_pair(2, curses.COLOR_GREEN, -1)
+
+
 
     mode_bar = ModeBar()
     search_bar = SearchBarComponent()
@@ -92,7 +96,9 @@ def main(stdscr):
 
         scroll_page.apply_filter(search_bar.query, filter_is_more_specific)
         filter_is_more_specific = True
-        text_box.note = scroll_page.get_current_item()
+        if not scroll_page.get_current_item() == text_box.note:
+            text_box.note = scroll_page.get_current_item()
+            text_box.startline = 0
 
         mode_bar.draw()
         scroll_page.draw()

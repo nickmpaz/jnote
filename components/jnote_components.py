@@ -1,4 +1,4 @@
-import curses, subprocess
+import curses, subprocess, os
 from .curses_components import *      
 
 class ModeBar(ScrollPageComponent):
@@ -45,7 +45,7 @@ class ScrollPage(ScrollPageComponent):
             
             for item in self.items:
 
-                if item.startswith(filter_str) or self.contains_str(item, filter_str):
+                if filter_str in item or self.contains_str(item, filter_str):
                     items_helper.append(item)
                 else:
                     self.filtered_items.append(item)
@@ -58,7 +58,7 @@ class ScrollPage(ScrollPageComponent):
             
             for item in self.filtered_items:
 
-                if item.startswith(filter_str) or self.contains_str(item, filter_str):
+                if filter_str in item or self.contains_str(item, filter_str):
                     self.items.append(item)
                 else:
                     filtered_items_helper.append(item)
@@ -69,6 +69,22 @@ class ScrollPage(ScrollPageComponent):
         if not items_before_len == len(self.items):
 
             self.focus = 0
+
+    # def draw_item(self, row, item_index):
+
+    #     row_content = str(self.items[item_index])
+    #     if os.path.isdir(self.notes_dir + row_content): color = curses.color_pair(1)
+    #     else: color = curses.color_pair(2)
+    #     row_content = row_content.ljust(self.width - 1) 
+
+        
+
+    #     if item_index == self.focus:
+    #         self.win.addnstr(row, 0, row_content, self.width, color | curses.A_REVERSE)
+    #     else:
+    #         self.win.addnstr(row, 0, row_content, self.width, color | curses.A_BOLD)
+
+    #     self.win.clrtoeol()
 
 class TextBox(TextBoxComponent):
 
