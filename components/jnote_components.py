@@ -70,22 +70,6 @@ class ScrollPage(ScrollPageComponent):
 
             self.focus = 0
 
-    # def draw_item(self, row, item_index):
-
-    #     row_content = str(self.items[item_index])
-    #     if os.path.isdir(self.notes_dir + row_content): color = curses.color_pair(1)
-    #     else: color = curses.color_pair(2)
-    #     row_content = row_content.ljust(self.width - 1) 
-
-        
-
-    #     if item_index == self.focus:
-    #         self.win.addnstr(row, 0, row_content, self.width, color | curses.A_REVERSE)
-    #     else:
-    #         self.win.addnstr(row, 0, row_content, self.width, color | curses.A_BOLD)
-
-    #     self.win.clrtoeol()
-
 class TextBox(TextBoxComponent):
 
     def __init__(self, height=10, width=10, begin_y=0, begin_x=0, notes_dir=""):
