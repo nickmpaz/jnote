@@ -33,7 +33,7 @@ class SearchBarComponent(Component):
     def draw(self): 
         super().draw()
         text_line = (self.height // 2) 
-        self.win.addstr(text_line, 0, self.query)
+        self.win.addstr(text_line, 0, self.prompt + " " +self.query)
         self.win.clrtoeol()
         self.win.refresh()
 
@@ -84,6 +84,7 @@ class ScrollPageComponent(Component):
         if len(self.items) == 0:
             self.win.clear()
             self.win.refresh()
+            return
 
         max_items_on_page = self.height        
 

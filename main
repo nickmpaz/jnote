@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+
+import sys, curses, time, os, pathlib, shutil
+from components.jnote_components import *   
+from components.curses_components import *
+from utils.notes_handler import *
+
+notes_handler = NotesHandler()
+
+def handle_screen_size(mode_bar, search_bar, scroll_page, text_box, confirm_window, confirm_dir_window, notification_window):
+
+    screen_width, screen_height = shutil.get_terminal_size()
+
+    screen_height -= 1
+    mbh = sbh = 3
+    mbw = sbw = screen_width
+    mbsy, sbsy= 0, mbh
+    mbsx = sbsx = 0
+
+    sph = tbh = screen_height - mbh - sbh  
+    spw = tbw = screen_width // 2
+    spsy = tbsy = mbh + sbh
+    spsx, tbsx = 0, spw + 1
+
+    cwh = nwh = cdh = screen_height // 3
+    cww = nww = cdw = screen_width // 2
+    cwsy = nwsy = cdsy = screen_height // 3
+    cwsx = nwsx = cdsx = screen_width // 4
+
+    confirm_window.set_window_size(cwh, cww, cwsy, cwsx)
+    confirm_dir_window.set_window_size(cdh, cdw, cdsy, cdsx)
+    notification_window.set_window_size(nwh, nww, nwsy, nwsx)
+    mode_bar.set_window_size(mbh, mbw, mbsy, mbsx)
+    search_bar.set_window_size(sbh, sbw, sbsy, sbsx)
+    scroll_page.set_window_size(sph, spw, spsy, spsx)
+    text_box.set_window_size(tbh, tbw, tbsy, tbsx)
+    
+def create(search_bar, scroll_page, confirm_window, confirm_dir_window):
+
+    if search_bar.query == "": return 
+    note_exists = search_bar.query in scroll_page.items
+
+    if confirm_dir_window.popup("create:"):
+        if note_exists and not confirm_window.popup('overwrite "%s"' % search_bar.query): return
+        curses.endwin()
+        notes_handler.create_note(search_bar.query)
+        
+    elif note_exists: return
+    else: notes_handler.create_dir(search_bar.query)
+
+    if not note_exists:
+        scroll_page.items.append(search_bar.query)
+        scroll_page.items = sorted(scroll_page.items)
+    
+
+def edit(scroll_page):
+    
+    if not scroll_page.get_current_item(): return
+    curses.endwin()
+    notes_handler.edit_note(scroll_page.get_current_item())
+
+def delete(scroll_page, confirm_window):
+
+    if not scroll_page.get_current_item() or not confirm_window.popup('delete "%s"' % scroll_page.get_current_item()): return
+
+    if notes_handler.is_dir(scroll_page.get_current_item()): 
+        notes_handler.delete_dir(scroll_page.get_current_item())
+    else:
+        notes_handler.delete_note(scroll_page.get_current_item())
+    scroll_page.items.pop(scroll_page.focus)
+    scroll_page.decrement_focus()
+
+def copy(scroll_page): 
+
+    if not scroll_page.get_current_item(): return
+    notes_handler.copy_file = notes_handler.notes_dir + scroll_page.get_current_item()
+    notes_handler.copy_note()
+
+def echo(scroll_page, notification_window):
+
+    if not scroll_page.get_current_item(): return
+    curses.endwin()
+    notes_handler.echo_note(scroll_page.get_current_item())
+    notification_window.popup('printed "%s" to console' % scroll_page.get_current_item())
+
+def main(stdscr):
+    
+    stdscr.refresh()
+    stdscr.keypad(True)
+    curses.use_default_colors()
+    curses.curs_set(False)
+    curses.init_pair(1, curses.COLOR_GREEN, -1)
+    curses.init_pair(2, curses.COLOR_BLUE, -1)
+
+    mode_bar = ModeBar()
+    search_bar = SearchBarComponent()
+    scroll_page = ScrollPage(notes_handler=notes_handler)
+    text_box = TextBox(notes_handler=notes_handler)
+    confirm_window = ConfirmNotificationComponent(stdscr=stdscr)
+    confirm_dir_window = ConfirmNotification(stdscr=stdscr)
+    notification_window = NotificationComponent(stdscr=stdscr)
+
+    handle_screen_size(mode_bar, search_bar, scroll_page, text_box, confirm_window, confirm_dir_window, notification_window)
+
+    scroll_page.items = notes_handler.get_notes()
+    search_bar.prompt = notes_handler.notes_dir[17:-1]
+    filter_is_more_specific = True
+
+    while True:
+
+        scroll_page.apply_filter(search_bar.query, filter_is_more_specific)
+        filter_is_more_specific = True
+        if not scroll_page.get_current_item() == text_box.note:
+            text_box.note = scroll_page.get_current_item()
+            text_box.startline = 0
+
+        mode_bar.draw(); scroll_page.draw(); text_box.draw(); search_bar.draw()
+
+        ch = stdscr.getkey()
+
+        if ch == '\n' and mode_bar.get_current_item() == "create": 
+
+            create(search_bar, scroll_page, confirm_window, confirm_dir_window)
+        
+        elif ch == '\n' and mode_bar.get_current_item() == "edit": 
+
+            if notes_handler.is_dir(scroll_page.get_current_item()):
+                notes_handler.down_dir(scroll_page.get_current_item())
+                scroll_page.items = notes_handler.get_notes()
+                scroll_page.filtered_items = []
+                scroll_page.focus = 0
+                search_bar.query = ""
+                search_bar.prompt = notes_handler.notes_dir[17:-1]
+            else:
+                edit(scroll_page)
+
+        elif ch == '\n' and mode_bar.get_current_item() == "delete": 
+
+            delete(scroll_page, confirm_window)
+
+        elif ch == '\n' and mode_bar.get_current_item() == "copy": 
+            if notes_handler.is_dir(scroll_page.get_current_item()):
+                notes_handler.down_dir(scroll_page.get_current_item())
+                scroll_page.items = notes_handler.get_notes()
+                scroll_page.filtered_items = []
+                scroll_page.focus = 0
+                search_bar.query = ""
+                search_bar.prompt = notes_handler.notes_dir[17:-1]
+            else:
+                copy(scroll_page)
+
+        elif ch == '\n' and mode_bar.get_current_item() == "echo": 
+
+            if notes_handler.is_dir(scroll_page.get_current_item()):
+                notes_handler.down_dir(scroll_page.get_current_item())
+                scroll_page.items = notes_handler.get_notes()
+                scroll_page.filtered_items = []
+                scroll_page.focus = 0
+                search_bar.query = ""
+                search_bar.prompt = notes_handler.notes_dir[17:-1]
+            else:
+                echo(scroll_page, notification_window)
+
+        elif ch == 'KEY_BACKSPACE': 
+
+            search_bar.query = search_bar.query[:-1]
+            filter_is_more_specific = False
+
+        elif ch == 'KEY_DC': 
+
+            search_bar.query = ""
+            filter_is_more_specific = False
+
+        elif ch == 'KEY_RESIZE': 
+
+            pass
+
+        elif ch == 'KEY_LEFT': 
+
+            mode_bar.decrement_focus()
+
+        elif ch == 'KEY_RIGHT':
+
+            mode_bar.increment_focus()
+        
+        elif ch == 'KEY_UP': 
+
+            scroll_page.decrement_focus()
+
+        elif ch == 'KEY_DOWN': 
+
+            scroll_page.increment_focus()
+
+        elif ch == 'KEY_SR': 
+
+            text_box.decrement_startline()
+
+        elif ch == 'KEY_SF': 
+
+            text_box.increment_startline()
+    
+        elif ch == 'KEY_SLEFT':
+
+            notes_handler.up_dir()
+            scroll_page.items = notes_handler.get_notes()
+            scroll_page.filtered_items = []
+            search_bar.query = ""
+            scroll_page.focus = 0
+            search_bar.prompt = notes_handler.notes_dir[17:-1]
+
+        elif len(ch) == 1: 
+
+            search_bar.query += ch
+    
+try: curses.wrapper(main)
+except KeyboardInterrupt:
+    notes_handler.copy_note()
+    sys.exit()
+except: raise
